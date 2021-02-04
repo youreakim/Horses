@@ -260,7 +260,7 @@ class HorseItem(scrapy.Item):
         output_processor = TakeFirst()
     )
     sex = scrapy.Field(
-        input_processor = MapCompose(str.strip, handle_sex),
+        input_processor = MapCompose(remove_tags, str.strip, handle_sex),
         output_processor = TakeFirst()
     )
     sire = scrapy.Field(

@@ -18,8 +18,8 @@ BASE_URL = 'https://www.letrot.com/stats/fiche-cheval/{}/'
 def parse_pedigree(html, horse):
     # the pedigree is five generations deep
     # all ancestors have an id the denotes generation and a value for where it
-    # is placed, 1 at the top 2**generation, if the second number is odd it is
-    # a sire, else a dam
+    # is placed, 1 at the top, 2**generation at the bottom, if the second number
+    # is odd it is a sire, else a dam
     cells = html.xpath('//div[@class="root"]//a[contains(@id,"_")]')
     cells = {x.attrib['id']: handle_cell(x) for x in cells}
 
@@ -64,11 +64,11 @@ def handle_cell(cell):
     if remove_tags(cell.get()) == '-':
         return
 
-    horse = ItemLoader(item=HorseItem())
+    horse = ItemLoader(item=HorseItem(), selector=cell)
 
-    horse.add_value('name', remove_tags(cell.get()))
-    horse.add_value('country', remove_tags(cell.get()))
-    horse.add_value('link', cell.attrib['href'])
+    horse.add_xpath('name', '.')
+    horse.add_xpath('country', '.')
+    horse.add_xpath('link', './@href')
     horse.add_value('sex', 'horse' if int(cell.attrib['id'][-1]) % 2 == 1 else 'mare')
 
     return horse
@@ -95,10 +95,12 @@ class HorseCollector(Spider):
     name = 'horsecollector'
     allowed_domains = ['letrot.com']
 
+
     def __init__(self, start_id='', *args, **kwargs):
         super(HorseCollector, self).__init__(*args, **kwargs)
 
         self.id = start_id
+
 
     def start_requests(self):
         yield SplashRequest(
@@ -125,6 +127,10 @@ class HorseCollector(Spider):
         if current_tab_text.lower() == 'dernières performances':
             # the horse has started
             for row in response.xpath('//table[@id="result_table"]/tbody/tr'):
+                # the horse has only done a qualifier and no races
+                if row.xpath('./td[@class="dataTables_empty"]'):
+                    break
+
                 racename = row.xpath('.//td[10]/text()').get()
                 if racename and racename.strip() == 'QUALIFICATION':
                     start = {
@@ -196,6 +202,10 @@ class HorseCollector(Spider):
 
     def parse_career(self, response, horse, id):
         for row in response.xpath('//table[contains(@id,"result_table")]/tbody/tr'):
+            # the horse has only done a qualifier and no races
+            if row.xpath('./td[@class="dataTables_empty"]'):
+                break
+
             year = row.xpath('.//td[1]//text()').get().strip()
             starts = int(row.xpath('.//td[2]/div/text()').get())
             wins = int(row.xpath('.//td[3]/div/text()').get())
@@ -221,6 +231,8 @@ class HorseCollector(Spider):
                 'wait': 5,
             }
         )
+
+
     def parse_pedigree(self, response, horse, id):
         parse_pedigree(response, horse)
 
@@ -235,20 +247,20 @@ class HorseCollector(Spider):
         # check if the horse has offspring
         if not response.xpath('//td[@class="dataTables_empty"]'):
             for row in response.xpath('//table[@id="result_table"]/tbody/tr'):
-                offspring = ItemLoader(item=HorseItem())
+                offspring = ItemLoader(item=HorseItem(), selector=row)
 
-                offspring.add_value('name', row.xpath('./td[1]//text()').get())
-                offspring.add_value('country', row.xpath('./td[1]//text()').get())
-                offspring.add_value('link', row.xpath('./td[1]//a/@href').get())
-                offspring.add_value('birthdate', row.xpath('./td[2]/text()').get())
-                offspring.add_value('sex', row.xpath('./td[3]/text()').get())
+                offspring.add_xpath('name', './td[1]/a')
+                offspring.add_xpath('country', './td[1]/a')
+                offspring.add_xpath('link', './td[1]/a/@href')
+                offspring.add_xpath('birthdate', './td[2]/text()')
+                offspring.add_xpath('sex', './td[3]/text()')
 
                 if horse.get_output_value('sex') == 'mare' and row.xpath('./td[4]/a'):
-                    sire = ItemLoader(item=HorseItem())
+                    sire = ItemLoader(item=HorseItem(), selector=row.xpath('./td[4]/a'))
 
-                    sire.add_value('name', row.xpath('./td[4]/a/text()').get())
-                    sire.add_value('country', row.xpath('./td[4]/a/text()').get())
-                    sire.add_value('link', row.xpath('./td[4]/a/@href').get())
+                    sire.add_xpath('name', '.')
+                    sire.add_xpath('country', '.')
+                    sire.add_xpath('link', './@href')
                     sire.add_value('sex', 'horse')
 
                     if sire.get_output_value('name'):
@@ -264,19 +276,19 @@ class HorseCollector(Spider):
                         )
 
                 elif row.xpath('./td[4]/a'):
-                    dam = ItemLoader(item=HorseItem())
+                    dam = ItemLoader(item=HorseItem(), selector=row.xpath('./td[4]/a'))
 
-                    dam.add_value('name', row.xpath('./td[4]/a/text()').get())
-                    dam.add_value('country', row.xpath('./td[4]/a/text()').get())
-                    dam.add_value('link', row.xpath('./td[4]/a/@href').get())
+                    dam.add_xpath('name', '.')
+                    dam.add_xpath('country', '.')
+                    dam.add_xpath('link', './@href')
                     dam.add_value('sex', 'mare')
 
                     if row.xpath('./td[5]/a'):
-                        dam_sire = ItemLoader(item=HorseItem())
+                        dam_sire = ItemLoader(item=HorseItem(), selector=row.xpath('./td[5]/a'))
 
-                        dam_sire.add_value('name', row.xpath('./td[5]/a/text()').get())
-                        dam_sire.add_value('country', row.xpath('./td[5]/a/text()').get())
-                        dam_sire.add_value('link', row.xpath('./td[5]/a/@href').get())
+                        dam_sire.add_xpath('name', '.')
+                        dam_sire.add_xpath('country', '.')
+                        dam_sire.add_xpath('link', './@href')
                         dam_sire.add_value('sex', 'horse')
 
                         if dam_sire.get_output_value('name'):
@@ -299,20 +311,20 @@ class HorseCollector(Spider):
 
         for row in response.xpath('//table[@id="result_table"]/tbody/tr'):
             # should add some check so it does not add the horse to dam_offspring
-            offspring = ItemLoader(item=HorseItem())
+            offspring = ItemLoader(item=HorseItem(), selector=row)
 
-            offspring.add_value('name', row.xpath('./td[1]/a/text()').get())
-            offspring.add_value('country', row.xpath('./td[1]/a/text()').get())
-            offspring.add_value('link', row.xpath('./td[1]/a/@href').get())
-            offspring.add_value('birthdate', row.xpath('./td[2]/text()').get())
-            offspring.add_value('sex', row.xpath('./td[3]/text()').get())
+            offspring.add_xpath('name', './td[1]/a')
+            offspring.add_xpath('country', './td[1]/a')
+            offspring.add_xpath('link', './td[1]/a/@href')
+            offspring.add_xpath('birthdate', './td[2]')
+            offspring.add_xpath('sex', './td[3]')
 
             if row.xpath('./td[4]/a'):
-                sire = ItemLoader(item=HorseItem())
+                sire = ItemLoader(item=HorseItem(), selector=row.xpath('./td[4]/a'))
 
-                sire.add_value('name', row.xpath('./td[4]/a/text()').get())
-                sire.add_value('country', row.xpath('./td[4]/a/text()').get())
-                sire.add_value('link', row.xpath('./td[4]/a/@href').get())
+                sire.add_xpath('name', '.')
+                sire.add_xpath('country', '.')
+                sire.add_xpath('link', './@href')
                 sire.add_value('sex', 'horse')
 
                 offspring.add_value('sire', sire.load_item())
@@ -346,4 +358,5 @@ class HorseCollector(Spider):
         if len(dam_offspring) != 0:
             horse['dam']['offspring'] = [dict(x.load_item()) for x in dam_offspring]
 
-        yield horse
+        #yield horse
+        print(horse)
