@@ -358,5 +358,5 @@ class HorseCollector(Spider):
         if len(dam_offspring) != 0:
             horse['dam']['offspring'] = [dict(x.load_item()) for x in dam_offspring]
 
-        #yield horse
-        print(horse)
+        yield horse
+        
