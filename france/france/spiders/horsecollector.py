@@ -254,14 +254,14 @@ class HorseCollector(Spider):
                     if sire.get_output_value('name'):
                         offspring.add_value('sire', sire.load_item())
 
-                    # filename = offspring.get_output_value('link').split('/')[1] + '.json'
-                    #
-                    # if not os.path.exists(os.path.join(JSON_DIRECTORY, 'horses', filename)):
-                    #     yield SplashRequest(
-                    #         url=BASE_URL.format(offspring.get_output_value('link')) + 'courses/dernieres-performances',
-                    #         callback=self.parse,
-                    #         cb_kwargs=dict(id=offspring.get_output_value('link'))
-                    #     )
+                    filename = offspring.get_output_value('link').split('/')[1] + '.json'
+
+                    if not os.path.exists(os.path.join(JSON_DIRECTORY, 'horses', filename)):
+                        yield SplashRequest(
+                            url=BASE_URL.format(offspring.get_output_value('link')) + 'courses/dernieres-performances',
+                            callback=self.parse,
+                            cb_kwargs=dict(id=offspring.get_output_value('link'))
+                        )
 
                 elif row.xpath('./td[4]/a'):
                     dam = ItemLoader(item=HorseItem())
@@ -330,14 +330,14 @@ class HorseCollector(Spider):
 
                 offspring.add_value('start_summary', start_summary)
 
-            # filename = offspring.get_output_value('link').split('/')[1] + '.json'
-            #
-            # if not os.path.exists(os.path.join(JSON_DIRECTORY, 'horses', filename)):
-            #     yield SplashRequest(
-            #         url=BASE_URL.format(offspring.get_output_value('link')) + 'courses/dernieres-performances',
-            #         callback=self.parse,
-            #         cb_kwargs=dict(id=offspring.get_output_value('link'))
-            #     )
+            filename = offspring.get_output_value('link').split('/')[1] + '.json'
+
+            if not os.path.exists(os.path.join(JSON_DIRECTORY, 'horses', filename)):
+                yield SplashRequest(
+                    url=BASE_URL.format(offspring.get_output_value('link')) + 'courses/dernieres-performances',
+                    callback=self.parse,
+                    cb_kwargs=dict(id=offspring.get_output_value('link'))
+                )
 
             dam_offspring.append(offspring)
 
@@ -346,5 +346,4 @@ class HorseCollector(Spider):
         if len(dam_offspring) != 0:
             horse['dam']['offspring'] = [dict(x.load_item()) for x in dam_offspring]
 
-        print(horse)
-        # yield horse
+        yield horse
