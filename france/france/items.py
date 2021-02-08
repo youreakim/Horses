@@ -106,6 +106,26 @@ def get_startmethod(conditions):
     return 'mobile' if "Départ à l'autostart" in conditions else 'standing'
 
 
+def handle_finish(place_string):
+    if place_string.isdigit():
+        return int(place_string)
+
+    return 0
+
+
+def is_disqalified(place_string):
+    return place_string.startswith('D')
+
+
+def did_start(place_string):
+    return place_string == 'NP'
+
+
+def disq_reason(place_string):
+    if place_string.startswith('D'):
+        return place_string
+
+
 class RacedayItem(scrapy.Item):
     date = scrapy.Field(
         input_processor = MapCompose(get_raceday_date),
@@ -182,6 +202,7 @@ class RaceStarterItem(scrapy.Item):
         output_processor = TakeFirst()
     )
     finish = scrapy.Field(
+        input_processor = MapCompose(remove_tags, str.strip, handle_finish),
         output_processor = TakeFirst()
     )
     order = scrapy.Field(
@@ -226,12 +247,15 @@ class RaceStarterItem(scrapy.Item):
         output_processor = TakeFirst()
     )
     started = scrapy.Field(
+        input_processor = MapCompose(remove_tags, str.strip, did_start),
         output_processor = TakeFirst()
     )
     disqualified = scrapy.Field(
+        input_processor = MapCompose(remove_tags, str.strip, is_disqalified),
         output_processor = TakeFirst()
     )
     disqstring = scrapy.Field(
+        input_processor = MapCompose(remove_tags, str.strip, disq_reason),
         output_processor = TakeFirst()
     )
     postposition = scrapy.Field(

@@ -100,21 +100,10 @@ class ResultCollector(Spider):
             # a new column was added some time ago to the results
             add_columns = 0 if len(row.xpath('./td')) == 11 else 1
 
-            finish = row.xpath('./td[1]/span[@class="bold"]/text()').extract_first()
-
-            if finish.isnumeric():
-                starter.add_value('finish', int(finish))
-                starter.add_value('disqualified', False)
-                starter.add_value('started', True)
-
-            elif finish[0] == 'D':
-                starter.add_value('finish', 0)
-                starter.add_value('disqualified', True)
-                starter.add_value('disqstring', finish)
-                starter.add_value('started', True)
-
-            elif finish == 'NP':
-                starter.add_value('started', False)
+            starter.add_xpath('finish', './/span[@class="bold"]')
+            starter.add_xpath('disqualified', './/span[@class="bold"]')
+            starter.add_xpath('started', './/span[@class="bold"]')
+            starter.add_xpath('disqstring', './/span[@class="bold"]')
 
             starter.add_xpath('startnumber', './td[2]')
 
