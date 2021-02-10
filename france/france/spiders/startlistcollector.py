@@ -99,7 +99,7 @@ class StartlistCollector(Spider):
             starter = ItemLoader(item=RaceStarterItem(), selector=row)
 
             starter.add_xpath('startnumber', './td[1]/span[1]')
-            starter.add_value('started', 'NP' not in row.xpath('./td[1]/span[@class="bold"]').get())
+            starter.add_xpath('started', './td[1]/span[@class="bold"]')
 
             horse = ItemLoader(item = HorseItem(), selector=row.xpath('./td[2]/a'))
 

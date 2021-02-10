@@ -40,10 +40,10 @@ def find_racenumber(url):
 
 def find_racetype(conditions):
     racetypes = {
-        'lähtö': 'race',
         'koelähtö': 'koe',
         'opetuslähtö': 'opetus',
-        'nuoret-lähtö': 'nuoret'
+        'nuoret-lähtö': 'nuoret',
+        ' lähtö': 'race'
         }
 
     for racetype in racetypes:

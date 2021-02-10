@@ -28,3 +28,9 @@ Norway
 horsecollector: information is collected from www.travsport.no.
 
 resultcollector and startlistcollector gets all information from https://www.rikstoto.no. These does not collect results and entries for qualifiers, those are found on www.travsport.no.
+
+Sweden
+======
+All information collected from https://sportapp.travsport.se, except for resultcollector where odds is collected from https://www.atg.se.
+
+The plan is to write a couple of additional scrapers to also collect toplists and breeding information.
