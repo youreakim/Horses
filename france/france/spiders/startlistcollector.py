@@ -18,7 +18,7 @@ class StartlistCollector(Spider):
     """
     Collects results from 'letrot.com'
     Takes a start_date and an end_date, in the form of '%Y-%m-%d', these default
-    to tomorrow.
+    to tomorrow and six days from today.
     """
     name = 'startlistcollector'
     allowed_domains = ['letrot.com']
@@ -66,7 +66,7 @@ class StartlistCollector(Spider):
 
         # if the startlist is ready it has a start time,
         # only collect if all races have start times
-        if len(race_rows) == len(start_times):
+        if len(race_rows) == len(start_times) and len(race_rows) != 0:
             for current_race in race_rows:
                 race = ItemLoader(item=RaceItem(), selector=current_race)
 

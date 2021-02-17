@@ -12,6 +12,10 @@ resultcollector collects the results available between a start_date and an end_d
 
 startlistcollector collects the startlists that are available.
 
+Belgium
+=======
+All information collected from https://www.trotting.be/
+
 Finland
 =======
 All information collected from https://heppa.hippos.fi
@@ -22,6 +26,10 @@ Right now all information is collected from https://www.letrot.com/fr/
 Later more information will be collected from https://infochevaux.ifce.fr/fr/info-chevaux and https://www.pmu.fr/
 
 horsecollector: the horse also has a list of siblings to the horse, these are also collected and any offspring to a mare will also be collected.
+
+Germany
+=======
+All information collected from https://www.hvtonline.de/
 
 Norway
 ======

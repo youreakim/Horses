@@ -64,8 +64,8 @@ class ResultCollector(Spider):
     An check to see if the day has already been collected should be added
     I think the cookie consent can get in the way sometimes, so occasionaly it fails
     """
-    name                        = 'resultcollector'
-    allowed_domains             = ['rikstoto.no', 'travsport.no']
+    name = 'resultcollector'
+    allowed_domains = ['rikstoto.no', 'travsport.no']
 
     def __init__(self, start_date = '', end_date = '', *args, **kwargs):
         super(ResultCollector, self).__init__(*args, **kwargs)
