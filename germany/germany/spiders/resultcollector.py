@@ -191,7 +191,7 @@ class ResultcollectorSpider(Spider):
 
                 if scratch.startswith('Nr. '):
                     starter.add_value('startnumber',
-                        scratch[ scratch.find('.') + 2 : scratch.find('.') + 5 ])
+                        scratch[ scratch.find('.') + 2 : scratch.find('.') + 4 ])
 
                     scratch = scratch[ scratch.find(' ', scratch.find('. ') + 2) : ]
 

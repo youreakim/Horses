@@ -16,6 +16,11 @@ Belgium
 =======
 All information collected from https://www.trotting.be/
 
+Denmark
+=======
+All information collected from DTCs site.
+They do not publish startlists so there is no collection of those.
+
 Finland
 =======
 All information collected from https://heppa.hippos.fi
@@ -31,11 +36,20 @@ Germany
 =======
 All information collected from https://www.hvtonline.de/
 
+Holland
+=======
+All information collected from https://www.ndr.nl/
+Somewhat limited amount of information can be collected.
+
 Norway
 ======
 horsecollector: information is collected from www.travsport.no.
 
 resultcollector and startlistcollector gets all information from https://www.rikstoto.no. These does not collect results and entries for qualifiers, those are found on www.travsport.no.
+
+Spain
+=====
+All information collected from https://www.federaciobaleardetrot.com
 
 Sweden
 ======

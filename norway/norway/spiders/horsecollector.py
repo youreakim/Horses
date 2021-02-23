@@ -144,8 +144,6 @@ class HorseCollector(Spider):
                 endpoint='execute'
             )
 
-        else:
-            print(self)
 
     def parse(self, response):
         for horse_list in response.data:
