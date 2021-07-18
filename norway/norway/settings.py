@@ -1,6 +1,4 @@
 # -*- coding: utf-8 -*-
-from shutil import which
-
 # Scrapy settings for norway project
 #
 # For simplicity, this file contains only settings considered important or
@@ -58,7 +56,6 @@ DOWNLOADER_MIDDLEWARES = {
     'scrapy_splash.SplashCookiesMiddleware': 723,
     'scrapy_splash.SplashMiddleware': 725,
     'scrapy.downloadermiddlewares.httpcompression.HttpCompressionMiddleware': 810,
-    'scrapy_selenium.SeleniumMiddleware': 800
 #    'norway.middlewares.NorwayDownloaderMiddleware': 543,
 }
 

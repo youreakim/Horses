@@ -1,27 +1,16 @@
 from scrapy.spiders import Spider
-from scrapy_splash import SplashRequest
-from scrapy.selector import Selector
 from scrapy.loader import ItemLoader
-from w3lib.html import remove_tags
+from scrapy.http import JsonRequest
+from datetime import date
 
-from norway.items import HorseItem
+from norway.items import HorseItem, SummaryItem, RacelineItem
 
-BASE_URL = 'http://www.travsport.no/Andre-elementer/Sok-etter-hestkusklop/Sok-etter-hest/'
+import json
+import os
 
 
-def handle_pedigree_cell(cell):
-    if not cell.xpath('./a/text()').get():
-        return None
-
-    ancestor = ItemLoader(item=HorseItem(), selector=cell)
-
-    ancestor.add_xpath('name', './a')
-    ancestor.add_xpath('country', './a')
-    ancestor.add_xpath('registration', './span[1]')
-    ancestor.add_xpath('link', './span[1]')
-    ancestor.add_value('sex', 'horse' if cell.attrib['class'] == 'fatherCell' else 'mare')
-
-    return ancestor
+BASE_URL = 'https://www.rikstoto.no/api'
+JSON_DIRECTORY = '/home/youreakim/dokument/hastar/standardbred/json/scrapy/norway'
 
 
 def add_parents(horse, sire, dam):
@@ -35,324 +24,244 @@ def add_parents(horse, sire, dam):
 
 class HorseCollector(Spider):
     """
-    Collects horses from 'travsport.no'
-    Use an id (registration number or ueln where available) or a name and the name
-    of the dam (in case there is multiple horses with the same name) as the starting
-    point.
-    Starts with that horse and collects pedigree, offspring, starts and start summary.
-    If the horse is a mare and has offspring, those are also collected.
+    Collects registration, pedigree and racing information for a horse specified
+    by start_id (registration number). If the horse is a mare, her offspring
+    will also be collected. Information retrieved from the API at 'rikstoto.no'.
     """
     name = 'horsecollector'
-    allowed_domains = ['travsport.no']
+    allowed_domains = ['rikstoto.no', 'travsport.no']
 
-    def __init__(self, name = '', dam = '', start_id = '', *args, **kwargs):
+
+    def __init__(self, start_id, *args, **kwargs):
         super(HorseCollector, self).__init__(*args, **kwargs)
-        self.name = name.lower()
-        self.dam = dam.lower()
-        self.id = start_id
-        self.lua_source = """
-                             treat = require('treat')
-                             function getHorsePages(splash)
-                                local tabIdPrefix = 'ctl00_MainRegion_horseInfo_cell'
-                                local ids = {'Avkom', 'Karriere', 'Starter', 'Stamtavle'}
-                                local whichTabs = {
-                                    ['Avkom'] = true,
-                                    ['Karriere'] = true,
-                                    ['Starter'] = true,
-                                    ['Stamtavle'] = true
-                                }
-                                local savedHtml = {}
-                                local currentlyOpen = splash:select('td.selected a'):text()
-                                if whichTabs[currentlyOpen] then
-                                    savedHtml[#savedHtml + 1] = splash:html()
-                                    whichTabs[currentlyOpen] = false
-                                end
-                                for i, v in ipairs(ids) do
-                                    local opening = splash:select('td#' .. tabIdPrefix .. v .. ' a')
-                                    if (opening and whichTabs[opening:text()]) then
-                                        local ok, reason = opening:mouse_click()
-                                        if ok then
-                                            assert(splash:wait(4))
-                                            savedHtml[#savedHtml + 1] = splash:html()
-                                        end
-                                    end
-                                end
-                                return treat.as_array(savedHtml)
-                             end
-
-                             function main(splash, args)
-                                assert(splash:go(args.url))
-                                assert(splash:wait(4.0))
-                                local searchResult = splash:select_all('#ctl00_MainRegion_horseSearch_dgHester tr')
-                                local htmlList = {}
-                                if #searchResult > 0 then
-                                    local searchLength = #searchResult
-                                    local row
-                                    local horseHtml
-                                    for i = 2, searchLength do
-                                        row = searchResult[i]
-                                        local links = row:querySelectorAll('a')
-                                        if #links > 2 then
-                                            local horseName = links[1]:text():lower()
-                                            i, j = string.find(horseName, '% %(')
-                                            if i then
-                                                horseName = string.sub(horseName, i)
-                                            end
-                                            local damName = links[3]:text():lower()
-                                            k, l = string.find(damName, '% %(')
-                                            if k then
-                                                damName = string.sub(damName, k)
-                                            end
-                                            if horseName == args.horseName and damName == args.damName then
-                                                row:querySelector('a').click()
-                                                assert(splash:wait(3))
-                                                horseHtml = getHorsePages(splash)
-                                                htmlList[#htmlList + 1] = horseHtml
-                                                assert(splash:go(args.url))
-                                                assert(splash:wait(3))
-                                                searchResult = splash:select_all('#ctl00_MainRegion_horseSearch_dgHester tr')
-                                            end
-                                        end
-                                    end
-                                else
-                                    local html = getHorsePages(splash)
-                                    htmlList[#htmlList + 1] = html
-                                end
-                                return treat.as_array(htmlList)
-                             end
-                             """
+        self.start_id = start_id
 
 
     def start_requests(self):
-        if self.id != '':
-            yield SplashRequest(
-                url=BASE_URL + '?regNo=' + self.id,
-                callback=self.parse,
-                args={'wait': 5,
-                      'lua_source': self.lua_source},
-                endpoint='execute'
-            )
-
-        elif self.name != '':
-            yield SplashRequest(
-                url=BASE_URL + '?modus=0&search=' + self.name.replace(' ', '+'),
-                callback=self.parse,
-                args={'wait': 5,
-                      'lua_source': self.lua_source,
-                      'horseName': self.name,
-                      'damName': self.dam},
-                endpoint='execute'
-            )
+        """
+        Get registration information for the horse specified by start_id.
+        """
+        yield JsonRequest(
+            url=f'{BASE_URL}/infopanel/liferow/horse/{self.start_id}',
+            callback=self.parse
+        )
 
 
     def parse(self, response):
-        for horse_list in response.data:
-            horse = ItemLoader(item=HorseItem())
+        """
+        Parse the registration information and get career summary.
+        """
+        response_json = json.loads(response.body)
 
-            header = True
+        horse_json = response_json['result']
 
-            for html in horse_list:
-                page_html = Selector(text=html)
-                if header:
-                    # the header information is available in all tabs, process once
-                    name_row = page_html.xpath('//span[@id="ctl00_MainRegion_horseInfo_lblNavn"]/text()').get()
-                    name_text = name_row[ : name_row.rfind('(') ]
+        horse = ItemLoader(item=HorseItem())
 
-                    horse.add_value('name', name_text)
-                    horse.add_value('breed', name_row[ name_row.rfind('(') + 1 : name_row.rfind(')') ])
-                    horse.add_value('country', name_text)
+        horse.add_value('name', horse_json['horseName'])
+        horse.add_value('country', horse_json['horseName'])
+        horse.add_value('registration', horse_json['horseRegistrationNumber'])
+        horse.add_value('sex', horse_json['sex'])
+        horse.add_value('breed', horse_json['breed'])
+        horse.add_value('collection_date', date.today().strftime('%Y-%m-%d'))
+        horse.add_value('birthdate', str(int(horse.get_output_value('collection_date')[:4]) - int(horse_json['age'][:-3])))
+        horse.add_value('breeder', horse_json['breederName'])
 
-                    infoline_text = page_html.xpath('//span[@class="infoLinje"]/text()').get()
-                    registration = infoline_text[ : infoline_text.find('f.') ].strip()
+        yield JsonRequest(
+            url=f'{BASE_URL}/infopanel/career/horse/{horse.get_output_value("registration")}',
+            callback=self.parse_summary,
+            cb_kwargs=dict(horse=horse)
+        )
 
-                    if '(' in registration:
-                        registration = registration[ : registration.find('(') ]
 
-                    if len(registration) > 15:
-                        registration = registration.replace('DNTs Eliteavlshoppe', '')
+    def parse_summary(self, response, horse):
+        """
+        Parse the career summary, if the horse has started, get the racelines
+        for each year the horse has made any starts, else continue to the
+        pedigree information.
+        """
+        response_json = json.loads(response.body)
 
-                    horse.add_value('link', registration)
-                    horse.add_value('registration', registration)
+        if len(response_json['result']) == 0:
+            yield JsonRequest(
+                url=f'{BASE_URL}/infopanel/pedigree/{horse.get_output_value("registration")}',
+                callback=self.parse_pedigree,
+                cb_kwargs=dict(horse=horse)
+            )
 
-                    if len(registration) == 15:
-                        horse.add_value('ueln', registration)
+        else:
+            summary_years = []
 
-                    birthyear = infoline_text[ infoline_text.find('f.') + 2 : infoline_text.find('f.') + 8 ].strip()
+            for summary_json in response_json['result']:
+                summary_years.append(summary_json['year'])
 
-                    if birthyear.isdigit():
-                        horse.add_value('birthdate', birthyear + '-01-01')
+                summary = ItemLoader(item=SummaryItem())
 
-                    if 'hingst' in infoline_text:
-                        horse.add_value('sex', 'horse')
-                    elif 'hoppe' in infoline_text:
-                        horse.add_value('sex', 'mare')
-                    elif 'vallak' in infoline_text:
-                        horse.add_value('sex', 'gelding')
-                    elif self.gender != '':
-                        horse.add_value('sex', self.gender)
+                summary.add_value('year', int(summary_json['year']))
+                summary.add_value('starts', summary_json['numberOfStarts'])
+                summary.add_value('wins', summary_json['numberOfFirstPlaces'])
+                summary.add_value('seconds', summary_json['numberOfSecondPlaces'])
+                summary.add_value('thirds', summary_json['numberOfThirdPlaces'])
+                summary.add_value('mobile_mark', summary_json['autoRecord'])
+                summary.add_value('standing_mark', summary_json['voltRecord'])
+                summary.add_value('purse', summary_json['earnings'] / 100)
 
-                    horse.add_value('breeder',
-                        page_html.xpath('//span[@id="ctl00_MainRegion_horseInfo_lblOppdretter"]/text()').get())
+                horse.add_value('start_summary', summary.load_item())
 
-                    header = False
+            yield JsonRequest(
+                url=f'{BASE_URL}/infopanel/starts/horse/{horse.get_output_value("registration")}/{summary_years[0]}-01-01/{summary_years[0]}-12-31',
+                callback=self.parse_starts,
+                cb_kwargs=dict(horse=horse, summary_years=summary_years)
+            )
 
-                current_page = page_html.xpath('//td[@class="selected"]/a/text()').get()
 
-                if current_page == 'Avkom':
-                    offspring_rows = page_html.xpath('//table[@class="dg"]//tr')
+    def parse_starts(self, response, horse, summary_years):
+        """
+        Parse the racelines from the response, check if there is any yearly
+        summaries left, if so get it and parse it else continue with the pedigree.
+        """
+        response_json = json.loads(response.body)
 
-                    for row in offspring_rows[ 1 : ]:
-                        columns = row.xpath('./td')
-                        columns_text = [x.xpath('.//text()').get() for x in columns]
+        for raceline_json in response_json['result']:
+            if raceline_json['raceDayKey'] is None:
+                continue
 
-                        offspring = ItemLoader(item=HorseItem(), selector=row)
+            raceline = ItemLoader(item=RacelineItem())
 
-                        offspring.add_xpath('name', './td[1]/a')
-                        offspring.add_xpath('country', './td[1]/a')
+            raceline.add_value('date', raceline_json['raceDate'].split('T')[0])
+            raceline.add_value('link', raceline_json['raceDayKey'])
+            raceline.add_value('racetrack', raceline_json['sportTrackName'])
+            raceline.add_value('racetrack_code', raceline_json['sportTrackCode'])
+            raceline.add_value('racetype', raceline_json['odds'])
+            raceline.add_value('driver', raceline_json['driverDisplayName'])
+            raceline.add_value('racenumber', raceline_json['raceNumber'])
+            raceline.add_value('postposition', raceline_json['postPosition'])
+            raceline.add_value('startnumber', raceline_json['startNumber'])
+            raceline.add_value('distance', raceline_json['distance'])
+            raceline.add_value('monte', raceline_json['monte'])
+            raceline.add_value('startmethod', raceline_json['startMethod'])
+            raceline.add_value('started', raceline_json['kmTime'])
 
-                        offspring.add_xpath('birthdate', './td[2]')
+            if raceline.get_output_value('started'):
+                raceline.add_value('finish', raceline_json['place'])
+                raceline.add_value('racetime', raceline_json['kmTime'])
+                raceline.add_value('gallop', raceline_json['galloped'])
+                raceline.add_value('purse', raceline_json['prize'])
+                raceline.add_value('ev_odds', raceline_json['odds'] if raceline_json['odds'].isnumeric() else None)
+                raceline.add_value('disqualified', raceline_json['kmTime'])
+                raceline.add_value('disqstring', raceline_json['kmTime'])
 
-                        offspring.add_xpath('sex', './td[4]')
+            horse.add_value('starts', raceline.load_item())
 
-                        if horse.get_output_value('sex') == 'mare' and row.xpath('./td[14]/a'):
-                            sire = ItemLoader(item=HorseItem(), selector=row.xpath('./td[14]/a'))
+        summary_years.pop(0)
 
-                            sire.add_xpath('name', '.')
-                            sire.add_xpath('country', '.')
-                            sire.add_value('sex', 'horse')
+        if len(summary_years) == 0:
+            yield JsonRequest(
+                url=f'{BASE_URL}/infopanel/pedigree/{horse.get_output_value("registration")}',
+                callback=self.parse_pedigree,
+                cb_kwargs=dict(horse=horse)
+            )
 
-                            offspring.add_value('sire', sire.load_item())
+        else:
+            yield JsonRequest(
+                url=f'{BASE_URL}/infopanel/starts/horse/{horse.get_output_value("registration")}/{summary_years[0]}-01-01/{summary_years[0]}-12-31',
+                callback=self.parse_starts,
+                cb_kwargs=dict(horse=horse, summary_years=summary_years)
+            )
 
-                            yield SplashRequest(
-                                url=BASE_URL + '?modus=0&search=' + offspring.get_output_value('name').replace(' ', '+'),
-                                callback=self.parse,
-                                args={'wait': 5,
-                                      'lua_source': self.lua_source,
-                                      'damName': horse.get_output_value('name').lower(),
-                                      'horseName': offspring.get_output_value('name').lower(),
-                                      'gender': offspring.get_output_value('sex')
-                                      },
-                                endpoint='execute'
-                            )
 
-                        elif row.xpath('./td[14]/a'):
-                            dam = ItemLoader(item=HorseItem(), selector=row.xpath('./td[14]/a'))
+    def parse_pedigree(self, response, horse):
+        """
+        Parse the pedigree then get the list for the horse's offspring.
+        """
+        response_json = json.loads(response.body)
 
-                            dam.add_xpath('name', '.')
-                            dam.add_xpath('country', '.')
-                            dam.add_value('sex', 'horse')
+        ancestors = []
 
-                            offspring.add_value('dam', dam.load_item())
+        keys = ['father', 'mother', 'fathersFather', 'fathersMother', 'mothersFather', 'mothersMother',
+                'fathersFathersFather', 'fathersFathersMother', 'fathersMothersFather', 'fathersMothersMother',
+                'mothersFathersFather', 'mothersFathersMother', 'mothersMothersFather', 'mothersMothersMother']
 
-                        if row.xpath('./td[6]/text()').get() != '0':
-                            standing_mark = row.xpath('./td[12]/text()').get()
-                            mobile_mark = row.xpath('./td[13]/text()').get()
+        for key in keys:
+            ancestor_json = response_json['result'][key]
 
-                            if mobile_mark:
-                                mobile_mark = f'{mobile_mark.strip()}a'
+            ancestor = ItemLoader(item=HorseItem())
 
-                            offspring.add_value('start_summary', {
-                                'year': 0,
-                                'starts': int(row.xpath('./td[6]/text()').get()),
-                                'wins': int(row.xpath('./td[7]/text()').get()),
-                                'place': int(row.xpath('./td[8]/text()').get()),
-                                'show': int(row.xpath('./td[9]/text()').get()),
-                                'purse': int(row.xpath('./td[11]/text()').get().replace(' ', '')),
-                                'mark': f'{standing_mark} - {mobile_mark}'
-                            })
+            ancestor.add_value('name', ancestor_json['name'])
+            ancestor.add_value('country', ancestor_json['name'])
+            ancestor.add_value('sex', 'horse' if key.endswith('ather') else 'mare')
+            ancestor.add_value('registration', ancestor_json['horseRegistrationNumber'])
 
-                        horse.add_value('offspring', offspring.load_item())
+            ancestors.append(ancestor)
 
-                elif current_page == 'Karriere':
-                    carrier_rows = page_html.xpath('//table[@class="dg"]//tr')
+        add_parents(ancestors[2], ancestors[6], ancestors[7])
+        add_parents(ancestors[3], ancestors[8], ancestors[9])
+        add_parents(ancestors[4], ancestors[10], ancestors[11])
+        add_parents(ancestors[5], ancestors[12], ancestors[13])
 
-                    for row in carrier_rows[ 1 : ]:
-                        columns_text = [remove_tags(x.get()) for x in row.xpath('./td')]
+        add_parents(ancestors[0], ancestors[2], ancestors[3])
+        add_parents(ancestors[1], ancestors[4], ancestors[5])
 
-                        horse.add_value('start_summary', {
-                            'year': int(columns_text[0]),
-                            'starts': int(columns_text[1]),
-                            'wins': int(columns_text[2]),
-                            'place': int(columns_text[3]),
-                            'show': int(columns_text[4]),
-                            'purse': int(columns_text[7].replace(' ', '').replace(',-', '')),
-                            'mark': columns_text[6]
-                        })
+        add_parents(horse, ancestors[0], ancestors[1])
 
-                elif current_page == 'Stamtavle':
-                    pedigree_cells = page_html.xpath('//table[@id="Table4"]//td')
+        yield JsonRequest(
+            url=f'{BASE_URL}/infopanel/offspring/{horse.get_output_value("registration")}',
+            callback=self.parse_offspring,
+            cb_kwargs=dict(horse=horse)
+        )
 
-                    ancestors = [handle_pedigree_cell(x) for x in pedigree_cells]
 
-                    # sire half of the pedigree
-                    add_parents(ancestors[2], ancestors[3], ancestors[4])
-                    add_parents(ancestors[5], ancestors[6], ancestors[7])
-                    add_parents(ancestors[9], ancestors[10], ancestors[11])
-                    add_parents(ancestors[12], ancestors[13], ancestors[14])
+    def parse_offspring(self, response, horse):
+        """
+        Parse the list of offspring the horse has. Skip offspring that are
+        unregistered. If the horse is a mare and she has offspring that has not
+        been retrieved, those will be collected.
+        """
+        response_json = json.loads(response.body)
 
-                    add_parents(ancestors[1], ancestors[2], ancestors[5])
-                    add_parents(ancestors[8], ancestors[9], ancestors[12])
+        for offspring_json in response_json['result']:
+            if offspring_json['certificationStatus'] == 'Makulert':
+                continue
 
-                    add_parents(ancestors[0], ancestors[1], ancestors[8])
+            offspring = ItemLoader(item=HorseItem())
 
-                    # dam half of the pedigree
-                    add_parents(ancestors[17], ancestors[18], ancestors[19])
-                    add_parents(ancestors[20], ancestors[21], ancestors[22])
-                    add_parents(ancestors[24], ancestors[25], ancestors[26])
-                    add_parents(ancestors[27], ancestors[28], ancestors[29])
+            offspring.add_value('name', offspring_json['name'])
+            offspring.add_value('country', offspring_json['name'])
+            offspring.add_value('registration', offspring_json['horseRegistrationNumber'])
+            offspring.add_value('sex', offspring_json['sex'])
+            offspring.add_value('birthdate', f'{offspring_json["birthYear"]}-01-01')
 
-                    add_parents(ancestors[16], ancestors[17], ancestors[20])
-                    add_parents(ancestors[23], ancestors[24], ancestors[27])
+            parent = ItemLoader(item=HorseItem())
 
-                    add_parents(ancestors[15], ancestors[16], ancestors[23])
+            parent_sex = 'fa' if horse.get_output_value('sex') == 'mare' else 'mo'
 
-                    add_parents(horse, ancestors[0], ancestors[15])
+            parent.add_value('name', offspring_json[f'{parent_sex}thersName'])
+            parent.add_value('country', offspring_json[f'{parent_sex}thersName'])
+            parent.add_value('registration', offspring_json[f'{parent_sex}thersHorseRegistrationNumber'])
+            parent.add_value('sex', 'horse' if horse.get_output_value('sex') == 'mare' else 'mare')
 
-                elif current_page == 'Starter':
-                    # if there is a link in the fourth column, this was a norwegian race
-                    start_rows = page_html.xpath('//table[@id="ctl00_MainRegion_horseInfo_startsUC_dgStarter"]//tr')
+            offspring.add_value('sire' if parent.get_output_value('sex') == 'horse' else 'dam', parent.load_item())
 
-                    starts = []
+            if offspring_json['numberOfStarts'] != 0:
+                summary = ItemLoader(item=SummaryItem())
 
-                    for row in start_rows[ 1 : ]:
-                        columns = row.xpath('./td')
-                        columns_text = [x.xpath('.//text()').get().strip() for x in columns]
+                summary.add_value('starts', offspring_json['numberOfStarts'])
+                summary.add_value('wins', offspring_json['numberOfFirstPlaces'])
+                summary.add_value('seconds', offspring_json['numberOfSecondPlaces'])
+                summary.add_value('thirds', offspring_json['numberOfThirdPlaces'])
+                summary.add_value('mobile_mark', offspring_json['autoRecord'])
+                summary.add_value('standing_mark', offspring_json['voltRecord'])
+                summary.add_value('purse', offspring_json['earnings'] / 100)
 
-                        start = {
-                            'driver': columns_text[0],
-                            'racetrack': columns_text[1],
-                            'racedate': '-'.join(reversed(columns_text[2].split('.'))),
-                            'racenumber': int(columns_text[3]) if columns_text[3].isdigit() else 0,
-                            'distance': int(columns_text[4].replace(' ', '')),
-                            'postposition': columns_text[5].replace('\xa0', ''),
-                            'startnumber': int(columns_text[6]),
-                            'has_link': row.xpath('./td[4]/a/@href').get() is not None
-                        }
+                offspring.add_value('start_summary', summary.load_item())
 
-                        # was the horse scratched
-                        if columns_text[8] == 'STR':
-                            start['started'] = False
-                        else:
-                            start['disqualified'] = columns_text[8][0] == 'd'
-                            start['gallop'] = 'G' in columns_text[11]
+            outfile = f'{offspring.get_output_value("registration").replace(" ", "_")}.json'
 
-                            if ',' in columns_text[8]:
-                                start['racetime'] = float(columns_text[8].replace('a', '').replace(',', '.'))
-                            elif 'br' in columns_text[8]:
-                                start['finished'] = False
-                            elif start['disqualified']:
-                                start['gallop'] = 'g' in columns_text[8]
+            if horse.get_output_value('sex') == 'mare' and not os.path.exists(os.path.join(JSON_DIRECTORY, 'horses', outfile)):
+                yield JsonRequest(
+                    url=f'{BASE_URL}/infopanel/liferow/horse/{offspring.get_output_value("registration")}',
+                    callback=self.parse
+                )
 
-                            start['started'] = True
-                            start['finish'] = int(columns_text[9]) if columns_text[9].isdigit() else 0
+            horse.add_value('offspring', offspring.load_item())
 
-                            if columns_text[12].isdigit():
-                                start['ev_odds'] = int(columns_text[12])
-
-                            start['purse'] = columns_text[13].replace(',-', '').replace(' ', '')
-
-                        starts.append(start)
-
-                    horse.add_value('starts', starts)
-
-            yield horse.load_item()
+        yield horse.load_item()
